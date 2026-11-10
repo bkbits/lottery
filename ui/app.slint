@@ -6,7 +6,7 @@ import {
     KitStat, KitTextField, KitToast, ToastInteraction, AlertSeverity, ButtonIntent, CheckState,
     KitThemeContext, KitThemes, Ownership, Tone
 } from "@kit";
-import { ScrollView, ListView } from "std-widgets.slint";
+import { ListView } from "std-widgets.slint";
 
 // ---------------------------------------------------------------- 数据结构
 
@@ -768,65 +768,60 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    // 外层仅横向滚动，表头与数据共享列宽，纵向滚动时表头保持可见。
-                    history-scroll := ScrollView {
+                    // 表头与列表共享横向偏移，纵向滚动条始终位于可视区域右侧。
+                    VerticalLayout {
+                        spacing: 0px;
                         min-width: 0px;
                         min-height: 0px;
                         vertical-stretch: 1;
-                        vertical-scrollbar-policy: always-off;
-                        content-width: max(self.visible-width, 1156px);
-                        content-height: self.visible-height;
-                        VerticalLayout {
+                        Rectangle {
+                            height: 38px;
+                            clip: true;
+                            background: KitThemeContext.current.canvas;
+                            HorizontalLayout {
+                                x: history-list.content-x;
+                                width: history-list.content-width;
+                                height: parent.height;
+                                spacing: 0px;
+                                for c[i] in root.history-header : Text {
+                                    text: c;
+                                    width: Columns.width-of(i) * max(history-list.visible-width, 1156px) / 1156px;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    color: KitThemeContext.current.text-secondary;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                        Rectangle {
+                            height: 1px;
+                            background: KitThemeContext.current.border-subtle;
+                        }
+                        history-list := ListView {
                             min-width: 0px;
                             min-height: 0px;
-                            width: history-scroll.content-width;
-                            height: history-scroll.visible-height;
-                            spacing: 0px;
-                            Rectangle {
-                                height: 38px;
-                                background: KitThemeContext.current.canvas;
+                            vertical-stretch: 1;
+                            content-width: max(self.visible-width, 1156px);
+                            scrolled => {
+                                if root.history-rows.length < root.history-total
+                                    && self.content-height + self.content-y - self.visible-height < 360px {
+                                    root.history-load-more();
+                                }
+                            }
+                            for row[index] in root.history-rows : Rectangle {
+                                width: max(history-list.visible-width, 1156px);
+                                height: 36px;
+                                background: mod(index, 2) == 0 ? KitThemeContext.current.surface : KitThemeContext.current.canvas;
                                 HorizontalLayout {
                                     spacing: 0px;
-                                    for c[i] in root.history-header : Text {
+                                    for c[i] in row.cells : Text {
                                         text: c;
-                                        width: Columns.width-of(i) * history-list.visible-width / 1156px;
+                                        width: Columns.width-of(i) * max(history-list.visible-width, 1156px) / 1156px;
                                         font-size: 12px;
-                                        font-weight: 700;
-                                        color: KitThemeContext.current.text-secondary;
+                                        overflow: elide;
                                         vertical-alignment: center;
-                                    }
-                                }
-                            }
-                            Rectangle {
-                                height: 1px;
-                                background: KitThemeContext.current.border-subtle;
-                            }
-                            history-list := ListView {
-                                min-width: 0px;
-                                min-height: 0px;
-                                vertical-stretch: 1;
-                                horizontal-scrollbar-policy: always-off;
-                                scrolled => {
-                                    if root.history-rows.length < root.history-total
-                                    && self.content-height + self.content-y - self.visible-height < 360px {
-                                        root.history-load-more();
-                                    }
-                                }
-                                for row[index] in root.history-rows : Rectangle {
-                                    width: history-list.visible-width;
-                                    height: 36px;
-                                    background: mod(index, 2) == 0 ? KitThemeContext.current.surface : KitThemeContext.current.canvas;
-                                    HorizontalLayout {
-                                        spacing: 0px;
-                                        for c[i] in row.cells : Text {
-                                            text: c;
-                                            width: Columns.width-of(i) * history-list.visible-width / 1156px;
-                                            font-size: 12px;
-                                            overflow: elide;
-                                            vertical-alignment: center;
-                                            color: i == 2 ? #dc2626 : (i == 3 ? #2563eb : KitThemeContext.current.text-primary);
-                                            font-weight: i == 2 || i == 3 ? 600 : 400;
-                                        }
+                                        color: i == 2 ? #dc2626 : (i == 3 ? #2563eb : KitThemeContext.current.text-primary);
+                                        font-weight: i == 2 || i == 3 ? 600 : 400;
                                     }
                                 }
                             }
