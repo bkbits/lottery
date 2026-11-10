@@ -1,0 +1,923 @@
+// 双色球数据分析与号码预测 —— 界面
+// 组件库：Slint Kit (@kit)
+import {
+    KitButton, KitBadge, KitCheckbox, KitDivider, KitDialogBody, KitDialogFooter,
+    KitDialogHeader, KitDialogPanel, KitDialogSurface, KitEmptyState, KitScrollArea,
+    KitStat, KitTextField, KitToast, ToastInteraction, AlertSeverity, ButtonIntent, CheckState,
+    KitThemeContext, KitThemes, Ownership, Tone
+} from "@kit";
+import { ScrollView, ListView } from "std-widgets.slint";
+
+// ---------------------------------------------------------------- 数据结构
+
+export struct AlgoRow {
+    id: int,
+    group: int, // 0=红球 1=蓝球 2=规则
+    name: string,
+    summary: string,
+    selected: bool,
+}
+
+export struct PredRow {
+    no: string,
+    reds: [string],
+    blue: string,
+    line: string,
+    meta: string,
+}
+
+export struct HistoryRow {
+    cells: [string],
+}
+
+export struct OmissionRow {
+    cells: [string], // 号码 / 当前 / 平均 / 最大 / 连出
+    tone: int,       // 0 普通 1 热 2 冷
+}
+
+export struct BucketRow {
+    label: string,
+    count: string,
+    percent: string,
+    ratio: float,
+}
+
+export struct StatRow {
+    label: string,
+    value: string,
+    hint: string,
+}
+
+// ---------------------------------------------------------------- 小部件
+
+global Columns {
+    // 历史表列宽：期号 日期 红球 蓝球 和值 跨度 奇偶 大小 质合 012路 区间 AC 连号 重号 同尾 邻号 尾和
+    pure public function width-of(i: int) -> length {
+        if i == 0 {
+            return 76px;
+        }
+        if i == 1 {
+            return 92px;
+        }
+        if i == 2 {
+            return 152px;
+        }
+        if i == 3 {
+            return 40px;
+        }
+        if i == 9 || i == 10 {
+            return 70px;
+        }
+        if i == 12 {
+            return 96px;
+        }
+        if i == 14 {
+            return 56px;
+        }
+        return 56px;
+    }
+}
+
+component Ball inherits Rectangle {
+    in property <string> label;
+    in property <color> fill: #dc2626;
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    background: root.fill;
+    Text {
+        text: root.label;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component Cell inherits Text {
+    in property <length> cell-width: 56px;
+    width: root.cell-width;
+    font-size: 12px;
+    overflow: elide;
+    vertical-alignment: center;
+    color: KitThemeContext.current.text-secondary;
+}
+
+component Card inherits Rectangle {
+    in property <length> card-padding: 20px;
+    in property <length> card-gap: 10px;
+    in property <LayoutAlignment> content-alignment: start;
+    background: KitThemeContext.current.surface;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: KitThemeContext.current.border-subtle;
+
+    VerticalLayout {
+        padding: root.card-padding;
+        spacing: root.card-gap;
+        alignment: root.content-alignment;
+        @children
+    }
+}
+
+component CardTitle inherits Text {
+    font-size: 15px;
+    font-weight: 600;
+    color: KitThemeContext.current.text-primary;
+    vertical-stretch: 0;
+}
+
+component Hint inherits Text {
+    font-size: 12px;
+    color: KitThemeContext.current.text-secondary;
+    vertical-stretch: 0;
+}
+
+component OmissionTable inherits Rectangle {
+    in property <string> heading;
+    in property <[OmissionRow]> rows;
+
+    min-width: 0px;
+    horizontal-stretch: 1;
+    height: (root.rows.length + 2) * 24px;
+    Hint {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: 24px;
+        vertical-alignment: center;
+        text: root.heading;
+        font-weight: 600;
+    }
+    for label[index] in ["号码", "当前", "平均", "最大", "连出"] : Text {
+        x: index * root.width / 5;
+        y: 24px;
+        width: root.width / 5;
+        height: 24px;
+        text: label;
+        font-size: 12px;
+        color: KitThemeContext.current.text-secondary;
+        vertical-alignment: center;
+    }
+    for r[row-index] in root.rows : Rectangle {
+        y: (row-index + 2) * 24px;
+        width: root.width;
+        height: 24px;
+        for c[i] in r.cells : Text {
+            x: i * root.width / 5;
+            width: root.width / 5;
+            height: 24px;
+            text: c;
+            font-size: 12px;
+            vertical-alignment: center;
+            color: i == 0
+                ? (r.tone == 1 ? KitThemeContext.current.accent : (r.tone == 2 ? KitThemeContext.current.information : KitThemeContext.current.text-primary))
+                : KitThemeContext.current.text-secondary;
+            font-weight: i == 0 ? 700 : 400;
+        }
+    }
+}
+
+component BucketCard inherits Rectangle {
+    in property <string> heading;
+    in property <[BucketRow]> rows;
+
+    min-width: 0px;
+    horizontal-stretch: 1;
+    height: 24px + root.rows.length * 30px;
+    VerticalLayout {
+        width: root.width;
+        height: root.height;
+        alignment: start;
+        spacing: 6px;
+        Hint {
+            height: 18px;
+            text: root.heading;
+            font-weight: 600;
+        }
+        for b in root.rows : HorizontalLayout {
+            height: 24px;
+            spacing: 8px;
+            Cell { text: b.label; cell-width: 62px; }
+            Rectangle {
+                horizontal-stretch: 1;
+                min-width: 24px;
+                height: 8px;
+                border-radius: 4px;
+                background: KitThemeContext.current.border-subtle;
+                Rectangle {
+                    width: parent.width * b.ratio;
+                    height: 100%;
+                    border-radius: 4px;
+                    background: KitThemeContext.current.accent;
+                }
+            }
+            Cell { text: b.count; cell-width: 46px; horizontal-alignment: right; }
+            Cell { text: b.percent; cell-width: 48px; horizontal-alignment: right; }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- 主窗口
+
+export component AppWindow inherits Window {
+    title: "双色球 · 数据与预测";
+    preferred-width: 1200px;
+    preferred-height: 860px;
+    min-width: 980px;
+    min-height: 620px;
+    background: KitThemeContext.current.canvas;
+    default-font-family: KitThemeContext.current.typography.family;
+
+    in-out property <int> page: 1;
+    in-out property <bool> dark: false;
+    in-out property <bool> busy: false;
+    in-out property <string> status-text: "尚未加载";
+    in-out property <string> status-detail: "正在准备数据库…";
+    in-out property <string> predict-count: "5";
+
+    in-out property <bool> alert-open: false;
+    in-out property <int> alert-level: 0; // 0 info 1 success 2 warning 3 error
+    in-out property <string> alert-text: "";
+    in-out property <int> alert-token: 0;
+    private property <bool> toast-hovered: false;
+    private property <bool> toast-focused: false;
+    private property <int> stats-section: 0;
+
+    in-out property <bool> info-open: false;
+    in-out property <string> info-title: "";
+    in-out property <string> info-body: "";
+
+    in-out property <[AlgoRow]> red-algos;
+    in-out property <[AlgoRow]> blue-algos;
+    in-out property <[AlgoRow]> rules;
+    in-out property <[PredRow]> predictions;
+    in-out property <[HistoryRow]> history-rows;
+    in-out property <int> history-total: 0;
+    callback history-load-more();
+    in-out property <[string]> history-header: [
+    "期号", "日期", "红球", "蓝球", "和值", "跨度", "奇偶", "大小", "质合",
+    "012路", "区间", "AC", "连号", "重号", "同尾", "邻号", "尾和"
+    ];
+    in-out property <[OmissionRow]> omission-red-a;
+    in-out property <[OmissionRow]> omission-red-b;
+    in-out property <[OmissionRow]> omission-red-c;
+    in-out property <[OmissionRow]> omission-blue-a;
+    in-out property <[OmissionRow]> omission-blue-b;
+    in-out property <[StatRow]> overview-stats;
+    in-out property <[StatRow]> feature-stats;
+    in-out property <[BucketRow]> sum-buckets;
+    in-out property <[BucketRow]> odd-even-buckets;
+    in-out property <[BucketRow]> big-small-buckets;
+    in-out property <[BucketRow]> prime-buckets;
+    in-out property <[BucketRow]> road-buckets;
+    in-out property <[BucketRow]> zone-buckets;
+    in-out property <[BucketRow]> ac-buckets;
+    in-out property <[string]> hot-reds;
+    in-out property <[string]> cold-reds;
+    in-out property <[string]> hot-blues;
+    in-out property <[string]> cold-blues;
+
+    callback refresh();
+    callback generate();
+    callback copy-all();
+    callback copy-line(string);
+    callback toggle-algo(int, int);
+    callback show-info(int, int);
+
+    init => {
+        KitThemeContext.current = root.dark ? KitThemes.dark : KitThemes.light;
+    }
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+        // ------------------------------------------------ 顶栏
+        Rectangle {
+            height: 106px;
+            background: KitThemeContext.current.surface;
+            border-width: 1px;
+            border-color: KitThemeContext.current.border-subtle;
+
+            HorizontalLayout {
+                padding: 24px;
+                spacing: 24px;
+                alignment: stretch;
+
+                VerticalLayout {
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    alignment: center;
+                    Text {
+                        text: "双色球 · 数据与预测";
+                        min-width: 0px;
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: KitThemeContext.current.text-primary;
+                    }
+                    Hint {
+                        text: root.status-detail;
+                        min-width: 0px;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        VerticalLayout {
+                            alignment: center;
+                            KitBadge {
+                                text: root.status-text;
+                                tone: root.busy ? Tone.warning : Tone.success;
+                            }
+                        }
+                        KitButton {
+                            text: "刷新数据";
+                            disabled: root.busy;
+                            activated => { root.refresh(); }
+                        }
+                        KitButton {
+                            text: root.dark ? "浅色主题" : "深色主题";
+                            intent: ButtonIntent.secondary;
+                            activated => {
+                                root.dark = !root.dark;
+                                KitThemeContext.current = root.dark ? KitThemes.dark : KitThemes.light;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ 导航
+        Rectangle {
+            height: 56px;
+            background: KitThemeContext.current.canvas;
+
+            HorizontalLayout {
+                padding-left: 24px;
+                padding-right: 24px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+                spacing: 8px;
+                alignment: start;
+
+                KitButton {
+                    text: "号码预测";
+                    intent: root.page == 0 ? ButtonIntent.primary : ButtonIntent.quiet;
+                    activated => { root.page = 0; }
+                }
+                KitButton {
+                    text: "往期统计";
+                    intent: root.page == 1 ? ButtonIntent.primary : ButtonIntent.quiet;
+                    activated => { root.page = 1; }
+                }
+                KitButton {
+                    text: "历史开奖";
+                    intent: root.page == 2 ? ButtonIntent.primary : ButtonIntent.quiet;
+                    activated => { root.page = 2; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Hint {
+                    text: root.busy ? "正在抓取数据…" : "";
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+
+        // ------------------------------------------------ 内容
+        if root.page == 0 : HorizontalLayout {
+            padding: 16px;
+            padding-left: 24px;
+            padding-right: 24px;
+            spacing: 16px;
+            vertical-stretch: 1;
+
+            // 左：设置
+            VerticalLayout {
+                width: 320px;
+                spacing: 10px;
+
+                KitScrollArea {
+                    vertical-stretch: 1;
+                    Card {
+                        card-padding: 16px;
+                        VerticalLayout {
+                            spacing: 8px;
+
+                            CardTitle { text: "预测设置"; }
+
+                            KitTextField {
+                                width: 100%;
+                                label: "预测注数";
+                                placeholder: "1 - 20";
+                                text <=> root.predict-count;
+                            }
+
+                            KitDivider { label: "红球策略（单选）"; }
+                            for a in root.red-algos : HorizontalLayout {
+                                spacing: 8px;
+                                KitCheckbox {
+                                    ownership: Ownership.controlled;
+                                    state: a.selected ? CheckState.checked : CheckState.unchecked;
+                                    label: a.name;
+                                    toggled => { root.toggle-algo(a.group, a.id); }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                KitButton {
+                                    text: "?";
+                                    intent: ButtonIntent.quiet;
+                                    accessible-label: a.name + " 算法说明";
+                                    activated => { root.show-info(a.group, a.id); }
+                                }
+                            }
+
+                            KitDivider { label: "蓝球策略（单选）"; }
+                            for a in root.blue-algos : HorizontalLayout {
+                                spacing: 8px;
+                                KitCheckbox {
+                                    ownership: Ownership.controlled;
+                                    state: a.selected ? CheckState.checked : CheckState.unchecked;
+                                    label: a.name;
+                                    toggled => { root.toggle-algo(a.group, a.id); }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                KitButton {
+                                    text: "?";
+                                    intent: ButtonIntent.quiet;
+                                    accessible-label: a.name + " 算法说明";
+                                    activated => { root.show-info(a.group, a.id); }
+                                }
+                            }
+
+                            KitDivider { label: "过滤规则（可多选）"; }
+                            for a in root.rules : HorizontalLayout {
+                                spacing: 8px;
+                                KitCheckbox {
+                                    ownership: Ownership.controlled;
+                                    state: a.selected ? CheckState.checked : CheckState.unchecked;
+                                    label: a.name;
+                                    toggled => { root.toggle-algo(a.group, a.id); }
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                KitButton {
+                                    text: "?";
+                                    intent: ButtonIntent.quiet;
+                                    accessible-label: a.name + " 规则说明";
+                                    activated => { root.show-info(a.group, a.id); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    KitButton {
+                        text: "生成预测";
+                        intent: ButtonIntent.primary;
+                        horizontal-stretch: 1;
+                        activated => { root.generate(); }
+                    }
+                    KitButton {
+                        text: "复制全部";
+                        disabled: root.predictions.length == 0;
+                        intent: ButtonIntent.secondary;
+                        activated => { root.copy-all(); }
+                    }
+                }
+                Hint {
+                    text: "复制格式：01,02,03,04,05,06+08（每行一组）";
+                    wrap: word-wrap;
+                }
+            }
+
+            // 右：结果
+            Card {
+                horizontal-stretch: 1;
+                content-alignment: stretch;
+                VerticalLayout {
+                    spacing: 16px;
+                    HorizontalLayout {
+                        CardTitle { text: "预测结果"; }
+                        Rectangle { horizontal-stretch: 1; }
+                        Hint { text: root.predictions.length > 0 ? "共 " + root.predictions.length + " 注" : "等待生成"; }
+                    }
+                    if root.predictions.length == 0 : Rectangle {
+                        vertical-stretch: 1;
+                        KitEmptyState {
+                            width: 100%;
+                            height: self.preferred-height;
+                            y: (parent.height - self.height) / 2;
+                            title: "还没有预测结果";
+                            description: "在左侧选择红球与蓝球策略，点击「生成预测」。";
+                        }
+                    }
+                    if root.predictions.length > 0 : KitScrollArea {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 12px;
+                            for p[i] in root.predictions : Card {
+                                card-padding: 16px;
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    alignment: stretch;
+
+                                    Hint {
+                                        text: p.no;
+                                        width: 22px;
+                                        vertical-alignment: center;
+                                        font-weight: 700;
+                                    }
+
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 8px;
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            spacing: 6px;
+                                            for n in p.reds : Ball { label: n; }
+                                            Ball { label: p.blue; fill: #2563eb; }
+                                        }
+                                        Hint { text: p.meta; }
+                                    }
+                                    KitButton {
+                                        text: "复制";
+                                        intent: ButtonIntent.quiet;
+                                        activated => { root.copy-line(p.line); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ 统计页
+        if root.page == 1 : HorizontalLayout {
+            vertical-stretch: 1;
+            padding-top: 16px;
+            padding-bottom: 16px;
+            padding-left: 24px;
+            padding-right: 24px;
+            spacing: 16px;
+            Card {
+                width: 144px;
+                card-padding: 12px;
+                VerticalLayout {
+                    alignment: start;
+                    spacing: 8px;
+                    CardTitle { text: "统计导航"; }
+                    for label[index] in ["数据概览", "红球遗漏", "蓝球与冷热", "形态分布", "形态均值"] : KitButton {
+                        text: label;
+                        width: 100%;
+                        intent: root.stats-section == index ? ButtonIntent.primary : ButtonIntent.quiet;
+                        activated => {
+                            root.stats-section = index;
+                            stats-scroll.content-y = -min(max(0px, stats-scroll.content-height - stats-scroll.visible-height),
+                            index == 0 ? 0px : (index == 1 ? red-section.y : (index == 2 ? blue-section.y : (index == 3 ? distribution-section.y : features-section.y))));
+                        }
+                    }
+                }
+            }
+            stats-scroll := KitScrollArea {
+                min-width: 0px;
+                scrolled => {
+                    root.stats-section = -self.content-y + 20px >= features-section.y ? 4
+                    : (-self.content-y + 20px >= distribution-section.y ? 3
+                    : (-self.content-y + 20px >= blue-section.y ? 2
+                    : (-self.content-y + 20px >= red-section.y ? 1 : 0)));
+                }
+                VerticalLayout {
+                    min-width: 0px;
+                    alignment: start;
+                    spacing: 16px;
+
+                    VerticalLayout {
+                        min-width: 0px;
+                        spacing: 12px;
+                        for row in 2 : HorizontalLayout {
+                            spacing: 12px;
+                            for col in 3 : Card {
+                                width: (stats-scroll.visible-width - 24px) / 3;
+                                card-padding: 14px;
+                                KitStat {
+                                    label: root.overview-stats[row * 3 + col].label;
+                                    value: root.overview-stats[row * 3 + col].value;
+                                    description: root.overview-stats[row * 3 + col].hint;
+                                }
+                            }
+                        }
+                    }
+
+                    red-section := Card {
+                        width: 100%;
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 10px;
+                            CardTitle { text: "号码遗漏（红球）"; }
+                            Hint {
+                                text: "当前遗漏 / 平均遗漏 / 最大遗漏 / 当前连出；主题强调色为热号，蓝色为冷号。";
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                alignment: stretch;
+                                spacing: 24px;
+                                OmissionTable { heading: "01-11"; rows: root.omission-red-a; }
+                                OmissionTable { heading: "12-22"; rows: root.omission-red-b; }
+                                OmissionTable { heading: "23-33"; rows: root.omission-red-c; }
+                            }
+                        }
+                    }
+
+                    blue-section := HorizontalLayout {
+                        spacing: 16px;
+                        alignment: stretch;
+
+                        Card {
+                            width: (stats-scroll.visible-width - 16px) / 2;
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 10px;
+                                CardTitle { text: "号码遗漏（蓝球）"; }
+                                HorizontalLayout {
+                                    alignment: stretch;
+                                    spacing: 24px;
+                                    OmissionTable { heading: "01-08"; rows: root.omission-blue-a; }
+                                    OmissionTable { heading: "09-16"; rows: root.omission-blue-b; }
+                                }
+                            }
+                        }
+
+                        Card {
+                            width: (stats-scroll.visible-width - 16px) / 2;
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 10px;
+                                CardTitle { text: "冷热号（近 30 期）"; }
+                                Hint { text: "红球热号"; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 6px;
+                                    for n in root.hot-reds : Ball { label: n; }
+                                }
+                                Hint { text: "红球冷号"; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 6px;
+                                    for n in root.cold-reds : Ball { label: n; fill: #64748b; }
+                                }
+                                Hint { text: "蓝球热号"; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 6px;
+                                    for n in root.hot-blues : Ball { label: n; fill: #2563eb; }
+                                }
+                                Hint { text: "蓝球冷号"; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    spacing: 6px;
+                                    for n in root.cold-blues : Ball { label: n; fill: #94a3b8; }
+                                }
+                            }
+                        }
+                    }
+
+                    distribution-section := VerticalLayout {
+                        alignment: start;
+                        spacing: 12px;
+                        CardTitle { text: "形态分布（全历史）"; }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: start;
+                                spacing: 12px;
+                                Card { card-padding: 14px; BucketCard { heading: "和值区间"; rows: root.sum-buckets; } }
+                                Card { card-padding: 14px; BucketCard { heading: "奇偶比"; rows: root.odd-even-buckets; } }
+                                Card { card-padding: 14px; BucketCard { heading: "大小比"; rows: root.big-small-buckets; } }
+                                Card { card-padding: 14px; BucketCard { heading: "质合比"; rows: root.prime-buckets; } }
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: start;
+                                spacing: 12px;
+                                Card { card-padding: 14px; BucketCard { heading: "012 路比"; rows: root.road-buckets; } }
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: start;
+                                spacing: 12px;
+                                Card { card-padding: 14px; BucketCard { heading: "区间比"; rows: root.zone-buckets; } }
+                                Card { card-padding: 14px; BucketCard { heading: "AC 值"; rows: root.ac-buckets; } }
+                            }
+                        }
+                    }
+
+                    features-section := Card {
+                        width: 100%;
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            CardTitle { text: "形态均值"; }
+                            for s in root.feature-stats : HorizontalLayout {
+                                spacing: 12px;
+                                Cell { text: s.label; cell-width: 200px; }
+                                Text {
+                                    text: s.value;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                    width: 120px;
+                                    color: KitThemeContext.current.text-primary;
+                                    vertical-alignment: center;
+                                }
+                                Hint { text: s.hint; horizontal-stretch: 1; wrap: word-wrap; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ 历史页
+        if root.page == 2 : VerticalLayout {
+            vertical-stretch: 1;
+            padding: 16px;
+            padding-left: 24px;
+            padding-right: 24px;
+
+            Card {
+                vertical-stretch: 1;
+                content-alignment: stretch;
+                VerticalLayout {
+                    spacing: 12px;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        CardTitle { text: "历史开奖"; vertical-alignment: center; }
+                        Rectangle { horizontal-stretch: 1; }
+                        Hint {
+                            text: "共 " + root.history-total + " 期 · 左右滚动查看全部指标";
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // 外层仅横向滚动，表头与数据共享列宽，纵向滚动时表头保持可见。
+                    history-scroll := ScrollView {
+                        min-width: 0px;
+                        min-height: 0px;
+                        vertical-stretch: 1;
+                        vertical-scrollbar-policy: always-off;
+                        content-width: max(self.visible-width, 1156px);
+                        content-height: self.visible-height;
+                        VerticalLayout {
+                            min-width: 0px;
+                            min-height: 0px;
+                            width: history-scroll.content-width;
+                            height: history-scroll.visible-height;
+                            spacing: 0px;
+                            Rectangle {
+                                height: 38px;
+                                background: KitThemeContext.current.canvas;
+                                HorizontalLayout {
+                                    spacing: 0px;
+                                    for c[i] in root.history-header : Text {
+                                        text: c;
+                                        width: Columns.width-of(i) * history-list.visible-width / 1156px;
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        color: KitThemeContext.current.text-secondary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                height: 1px;
+                                background: KitThemeContext.current.border-subtle;
+                            }
+                            history-list := ListView {
+                                min-width: 0px;
+                                min-height: 0px;
+                                vertical-stretch: 1;
+                                horizontal-scrollbar-policy: always-off;
+                                scrolled => {
+                                    if root.history-rows.length < root.history-total
+                                    && self.content-height + self.content-y - self.visible-height < 360px {
+                                        root.history-load-more();
+                                    }
+                                }
+                                for row[index] in root.history-rows : Rectangle {
+                                    width: history-list.visible-width;
+                                    height: 36px;
+                                    background: mod(index, 2) == 0 ? KitThemeContext.current.surface : KitThemeContext.current.canvas;
+                                    HorizontalLayout {
+                                        spacing: 0px;
+                                        for c[i] in row.cells : Text {
+                                            text: c;
+                                            width: Columns.width-of(i) * history-list.visible-width / 1156px;
+                                            font-size: 12px;
+                                            overflow: elide;
+                                            vertical-alignment: center;
+                                            color: i == 2 ? #dc2626 : (i == 3 ? #2563eb : KitThemeContext.current.text-primary);
+                                            font-weight: i == 2 || i == 3 ? 600 : 400;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Hint {
+                        text: "已加载 " + root.history-rows.length + " / " + root.history-total + " 期"
+                        + (root.history-rows.length < root.history-total ? " · 向下滚动继续加载" : " · 已加载全部");
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------ 浮动提示
+    changed alert-token => { toast-timer.restart(); }
+    changed alert-open => {
+        if !root.alert-open { root.toast-hovered = false; root.toast-focused = false; }
+    }
+    toast-timer := Timer {
+        interval: root.alert-level == 3 ? 8s : 4s;
+        running: root.alert-open && !root.toast-hovered && !root.toast-focused;
+        triggered => { root.alert-open = false; }
+    }
+    if root.alert-open : KitToast {
+        width: min(root.width - 48px, 440px);
+        height: self.preferred-height;
+        x: root.width - self.width - 24px;
+        y: root.height - self.height - 24px;
+        entry: {
+            token: root.alert-token,
+            title: root.alert-level == 3 ? "操作失败" : (root.alert-level == 1 ? "操作成功" : "提示"),
+            message: root.alert-text,
+            action-label: "",
+            severity: root.alert-level == 1 ? AlertSeverity.success
+            : (root.alert-level == 2 ? AlertSeverity.warning
+            : (root.alert-level == 3 ? AlertSeverity.error : AlertSeverity.information)),
+            dismissible: true,
+        };
+        dismiss(token) => { root.alert-open = false; }
+        interaction(token, source, engaged) => {
+            if source == ToastInteraction.pointer { root.toast-hovered = engaged; }
+            else { root.toast-focused = engaged; }
+        }
+    }
+
+    // ------------------------------------------------ 算法说明弹窗
+    KitDialogSurface {
+        state: { open: root.info-open, topmost: true, busy: false };
+        dismiss(reason) => { root.info-open = false; }
+
+        KitDialogPanel {
+            width: min(parent.width - 96px, 560px);
+            height: min(parent.height - 120px, 440px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            accessible-name: root.info-title;
+
+            VerticalLayout {
+                padding: 24px;
+                spacing: 16px;
+
+                KitDialogHeader {
+                    Text {
+                        text: root.info-title;
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: KitThemeContext.current.text-primary;
+                        vertical-alignment: center;
+                    }
+                }
+
+                KitDialogBody {
+                    vertical-stretch: 1;
+                    KitScrollArea {
+                        Text {
+                            text: root.info-body;
+                            wrap: word-wrap;
+                            font-size: 13px;
+                            color: KitThemeContext.current.text-primary;
+                        }
+                    }
+                }
+
+                KitDialogFooter {
+                    KitButton {
+                        text: "关闭";
+                        activated => { root.info-open = false; }
+                    }
+                }
+            }
+        }
+    }
+}
