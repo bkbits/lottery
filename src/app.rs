@@ -828,6 +828,10 @@ fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "android")]
-fn copy_to_clipboard(_text: &str) -> anyhow::Result<()> {
-    anyhow::bail!("移动端请长按结果文本手动复制")
+fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
+    i_slint_backend_selector::with_platform(|platform| {
+        platform.set_clipboard_text(text, slint::platform::Clipboard::DefaultClipboard);
+        Ok(())
+    })
+    .map_err(|err| anyhow::anyhow!("{err}"))
 }

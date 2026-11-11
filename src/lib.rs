@@ -18,6 +18,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 fn android_main(app: slint::android::AndroidApp) {
+    let data_dir = app
+        .internal_data_path()
+        .expect("Android application internal data directory is unavailable");
+    data::store::set_android_data_dir(data_dir);
     slint::android::init(app).expect("Failed to init Slint Android backend");
     run().expect("Failed to run UI event loop");
 }

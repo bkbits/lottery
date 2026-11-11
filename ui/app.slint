@@ -4,9 +4,10 @@ import {
     KitButton, KitBadge, KitCheckbox, KitDivider, KitDialogBody, KitDialogFooter,
     KitDialogHeader, KitDialogPanel, KitDialogSurface, KitEmptyState, KitScrollArea,
     KitStat, KitTextField, KitToast, ToastInteraction, AlertSeverity, ButtonIntent, CheckState,
-    KitThemeContext, KitThemes, Ownership, Tone
+    KitThemeContext, KitThemes, Ownership, Tone, ControlSize, ControlWidth
 } from "@kit";
 import { ListView } from "std-widgets.slint";
+import "../assets/fonts/AlibabaPuHuiTi-3-55-Regular.ttf";
 
 // ---------------------------------------------------------------- 数据结构
 
@@ -172,8 +173,8 @@ component OmissionTable inherits Rectangle {
             font-size: 12px;
             vertical-alignment: center;
             color: i == 0
-                ? (r.tone == 1 ? KitThemeContext.current.accent : (r.tone == 2 ? KitThemeContext.current.information : KitThemeContext.current.text-primary))
-                : KitThemeContext.current.text-secondary;
+            ? (r.tone == 1 ? KitThemeContext.current.accent : (r.tone == 2 ? KitThemeContext.current.information : KitThemeContext.current.text-primary))
+            : KitThemeContext.current.text-secondary;
             font-weight: i == 0 ? 700 : 400;
         }
     }
@@ -219,16 +220,77 @@ component BucketCard inherits Rectangle {
     }
 }
 
+component MobileHistoryCard inherits Rectangle {
+    in property <HistoryRow> draw;
+    in property <[string]> headers;
+    private property <bool> expanded: false;
+    height: root.expanded ? 380px : 148px;
+    background: KitThemeContext.current.surface;
+    VerticalLayout {
+        padding: 8px;
+        spacing: 6px;
+        alignment: start;
+        HorizontalLayout {
+            spacing: 8px;
+            CardTitle { text: root.draw.cells[0] + " 期"; }
+            Rectangle { horizontal-stretch: 1; }
+            Hint { text: root.draw.cells[1]; }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.draw.cells[2];
+                font-size: 15px;
+                font-weight: 700;
+                color: #dc2626;
+                vertical-alignment: center;
+            }
+            Ball { label: root.draw.cells[3]; fill: #2563eb; }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        KitButton {
+            control-size: ControlSize.comfortable;
+            control-width: ControlWidth.fill;
+            text: root.expanded ? "收起指标" : "展开全部指标";
+            intent: ButtonIntent.secondary;
+            activated => { root.expanded = !root.expanded; }
+        }
+        if root.expanded : VerticalLayout {
+            spacing: 4px;
+            for r in 7 : HorizontalLayout {
+                spacing: 8px;
+                height: 28px;
+                for c in 2 : Text {
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    text: 4 + r * 2 + c < root.headers.length
+                    ? root.headers[4 + r * 2 + c] + " " + root.draw.cells[4 + r * 2 + c] : "";
+                    font-size: 12px;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    color: KitThemeContext.current.text-secondary;
+                }
+            }
+        }
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: KitThemeContext.current.border-subtle; }
+}
+
 // ---------------------------------------------------------------- 主窗口
 
 export component AppWindow inherits Window {
     title: "双色球 · 数据与预测";
     preferred-width: 1200px;
     preferred-height: 860px;
-    min-width: 980px;
-    min-height: 620px;
+    min-width: 320px;
+    min-height: 360px;
+    // 在尺寸变化时切换布局，避免窗口的隐式约束参与宽度绑定循环。
+    private property <bool> compact: false;
+    changed width => { root.compact = root.width < 980px; }
+    private property <length> gutter: root.compact ? 12px : 24px;
+    private property <bool> mobile-results: false;
     background: KitThemeContext.current.canvas;
-    default-font-family: KitThemeContext.current.typography.family;
+    default-font-family: "Alibaba PuHuiTi 3.0";
 
     in-out property <int> page: 1;
     in-out property <bool> dark: false;
@@ -287,22 +349,28 @@ export component AppWindow inherits Window {
     callback show-info(int, int);
 
     init => {
+        root.compact = root.width < 980px;
         KitThemeContext.current = root.dark ? KitThemes.dark : KitThemes.light;
     }
 
     VerticalLayout {
-        padding: 0px;
+        padding-left: root.safe-area-insets.left;
+        padding-right: root.safe-area-insets.right;
+        padding-top: root.safe-area-insets.top;
+        padding-bottom: max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
         spacing: 0px;
         // ------------------------------------------------ 顶栏
         Rectangle {
-            height: 106px;
+            height: root.compact ? 136px : 106px;
             background: KitThemeContext.current.surface;
             border-width: 1px;
             border-color: KitThemeContext.current.border-subtle;
 
-            HorizontalLayout {
-                padding: 24px;
-                spacing: 24px;
+            FlexboxLayout {
+                flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                flex-wrap: no-wrap;
+                padding: root.compact ? 12px : 24px;
+                spacing: root.compact ? 8px : 24px;
                 alignment: stretch;
 
                 VerticalLayout {
@@ -312,6 +380,7 @@ export component AppWindow inherits Window {
                     alignment: center;
                     Text {
                         text: "双色球 · 数据与预测";
+                        overflow: elide;
                         min-width: 0px;
                         font-size: 18px;
                         font-weight: 700;
@@ -329,7 +398,7 @@ export component AppWindow inherits Window {
                     alignment: center;
                     HorizontalLayout {
                         spacing: 12px;
-                        VerticalLayout {
+                        if !root.compact : VerticalLayout {
                             alignment: center;
                             KitBadge {
                                 text: root.status-text;
@@ -337,12 +406,18 @@ export component AppWindow inherits Window {
                             }
                         }
                         KitButton {
-                            text: "刷新数据";
+                            control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                            text: root.busy ? "刷新中…" : "刷新数据";
+                            horizontal-stretch: 1;
+                            control-width: root.compact ? ControlWidth.fill : ControlWidth.intrinsic;
                             disabled: root.busy;
                             activated => { root.refresh(); }
                         }
                         KitButton {
+                            control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
                             text: root.dark ? "浅色主题" : "深色主题";
+                            horizontal-stretch: 1;
+                            control-width: root.compact ? ControlWidth.fill : ControlWidth.intrinsic;
                             intent: ButtonIntent.secondary;
                             activated => {
                                 root.dark = !root.dark;
@@ -356,34 +431,49 @@ export component AppWindow inherits Window {
 
         // ------------------------------------------------ 导航
         Rectangle {
-            height: 56px;
+            height: root.compact ? 64px : 56px;
             background: KitThemeContext.current.canvas;
 
             HorizontalLayout {
-                padding-left: 24px;
-                padding-right: 24px;
+                padding-left: root.gutter;
+                padding-right: root.gutter;
                 padding-top: 8px;
                 padding-bottom: 8px;
                 spacing: 8px;
                 alignment: start;
 
                 KitButton {
+                    control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                    padding-inline: root.compact ? 12px : 16px;
                     text: "号码预测";
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    control-width: root.compact ? ControlWidth.fill : ControlWidth.intrinsic;
                     intent: root.page == 0 ? ButtonIntent.primary : ButtonIntent.quiet;
                     activated => { root.page = 0; }
                 }
                 KitButton {
+                    control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                    padding-inline: root.compact ? 12px : 16px;
                     text: "往期统计";
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    control-width: root.compact ? ControlWidth.fill : ControlWidth.intrinsic;
                     intent: root.page == 1 ? ButtonIntent.primary : ButtonIntent.quiet;
                     activated => { root.page = 1; }
                 }
                 KitButton {
+                    control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                    padding-inline: root.compact ? 12px : 16px;
                     text: "历史开奖";
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    control-width: root.compact ? ControlWidth.fill : ControlWidth.intrinsic;
                     intent: root.page == 2 ? ButtonIntent.primary : ButtonIntent.quiet;
                     activated => { root.page = 2; }
                 }
-                Rectangle { horizontal-stretch: 1; }
-                Hint {
+                if !root.compact : Rectangle { horizontal-stretch: 1; }
+                if !root.compact : Hint {
                     text: root.busy ? "正在抓取数据…" : "";
                     vertical-alignment: center;
                 }
@@ -392,165 +482,212 @@ export component AppWindow inherits Window {
 
 
         // ------------------------------------------------ 内容
-        if root.page == 0 : HorizontalLayout {
+        if root.page == 0 : VerticalLayout {
             padding: 16px;
-            padding-left: 24px;
-            padding-right: 24px;
+            padding-left: root.gutter;
+            padding-right: root.gutter;
             spacing: 16px;
             vertical-stretch: 1;
 
-            // 左：设置
-            VerticalLayout {
-                width: 320px;
-                spacing: 10px;
-
-                KitScrollArea {
-                    vertical-stretch: 1;
-                    Card {
-                        card-padding: 16px;
-                        VerticalLayout {
-                            spacing: 8px;
-
-                            CardTitle { text: "预测设置"; }
-
-                            KitTextField {
-                                width: 100%;
-                                label: "预测注数";
-                                placeholder: "1 - 20";
-                                text <=> root.predict-count;
-                            }
-
-                            KitDivider { label: "红球策略（单选）"; }
-                            for a in root.red-algos : HorizontalLayout {
-                                spacing: 8px;
-                                KitCheckbox {
-                                    ownership: Ownership.controlled;
-                                    state: a.selected ? CheckState.checked : CheckState.unchecked;
-                                    label: a.name;
-                                    toggled => { root.toggle-algo(a.group, a.id); }
-                                }
-                                Rectangle { horizontal-stretch: 1; }
-                                KitButton {
-                                    text: "?";
-                                    intent: ButtonIntent.quiet;
-                                    accessible-label: a.name + " 算法说明";
-                                    activated => { root.show-info(a.group, a.id); }
-                                }
-                            }
-
-                            KitDivider { label: "蓝球策略（单选）"; }
-                            for a in root.blue-algos : HorizontalLayout {
-                                spacing: 8px;
-                                KitCheckbox {
-                                    ownership: Ownership.controlled;
-                                    state: a.selected ? CheckState.checked : CheckState.unchecked;
-                                    label: a.name;
-                                    toggled => { root.toggle-algo(a.group, a.id); }
-                                }
-                                Rectangle { horizontal-stretch: 1; }
-                                KitButton {
-                                    text: "?";
-                                    intent: ButtonIntent.quiet;
-                                    accessible-label: a.name + " 算法说明";
-                                    activated => { root.show-info(a.group, a.id); }
-                                }
-                            }
-
-                            KitDivider { label: "过滤规则（可多选）"; }
-                            for a in root.rules : HorizontalLayout {
-                                spacing: 8px;
-                                KitCheckbox {
-                                    ownership: Ownership.controlled;
-                                    state: a.selected ? CheckState.checked : CheckState.unchecked;
-                                    label: a.name;
-                                    toggled => { root.toggle-algo(a.group, a.id); }
-                                }
-                                Rectangle { horizontal-stretch: 1; }
-                                KitButton {
-                                    text: "?";
-                                    intent: ButtonIntent.quiet;
-                                    accessible-label: a.name + " 规则说明";
-                                    activated => { root.show-info(a.group, a.id); }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                HorizontalLayout {
-                    spacing: 8px;
-                    KitButton {
-                        text: "生成预测";
-                        intent: ButtonIntent.primary;
-                        horizontal-stretch: 1;
-                        activated => { root.generate(); }
-                    }
-                    KitButton {
-                        text: "复制全部";
-                        disabled: root.predictions.length == 0;
-                        intent: ButtonIntent.secondary;
-                        activated => { root.copy-all(); }
-                    }
-                }
-                Hint {
-                    text: "复制格式：01,02,03,04,05,06+08（每行一组）";
-                    wrap: word-wrap;
+            if root.compact : HorizontalLayout {
+                spacing: 8px;
+                for label[index] in ["预测设置", "预测结果"] : KitButton {
+                    control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                    text: label;
+                    horizontal-stretch: 1;
+                    control-width: ControlWidth.fill;
+                    intent: root.mobile-results == (index == 1) ? ButtonIntent.primary : ButtonIntent.secondary;
+                    activated => { root.mobile-results = index == 1; }
                 }
             }
+            HorizontalLayout {
+                min-width: 0px;
+                min-height: 0px;
+                spacing: root.compact ? 0px : 16px;
+                vertical-stretch: 1;
+                // 左：设置
+                if !root.compact || !root.mobile-results : VerticalLayout {
+                    min-width: 0px;
+                    preferred-width: 320px;
+                    max-width: root.compact ? 100000px : 320px;
+                    horizontal-stretch: root.compact ? 1 : 0;
+                    min-height: 0px;
+                    spacing: 10px;
 
-            // 右：结果
-            Card {
-                horizontal-stretch: 1;
-                content-alignment: stretch;
-                VerticalLayout {
-                    spacing: 16px;
-                    HorizontalLayout {
-                        CardTitle { text: "预测结果"; }
-                        Rectangle { horizontal-stretch: 1; }
-                        Hint { text: root.predictions.length > 0 ? "共 " + root.predictions.length + " 注" : "等待生成"; }
-                    }
-                    if root.predictions.length == 0 : Rectangle {
+                    KitScrollArea {
                         vertical-stretch: 1;
-                        KitEmptyState {
-                            width: 100%;
-                            height: self.preferred-height;
-                            y: (parent.height - self.height) / 2;
-                            title: "还没有预测结果";
-                            description: "在左侧选择红球与蓝球策略，点击「生成预测」。";
-                        }
-                    }
-                    if root.predictions.length > 0 : KitScrollArea {
-                        vertical-stretch: 1;
-                        VerticalLayout {
-                            spacing: 12px;
-                            for p[i] in root.predictions : Card {
-                                card-padding: 16px;
-                                HorizontalLayout {
-                                    spacing: 12px;
-                                    alignment: stretch;
+                        Card {
+                            card-padding: 16px;
+                            VerticalLayout {
+                                spacing: 8px;
 
-                                    Hint {
-                                        text: p.no;
-                                        width: 22px;
-                                        vertical-alignment: center;
-                                        font-weight: 700;
-                                    }
+                                CardTitle { text: "预测设置"; }
 
-                                    VerticalLayout {
-                                        horizontal-stretch: 1;
-                                        spacing: 8px;
-                                        HorizontalLayout {
-                                            alignment: start;
-                                            spacing: 6px;
-                                            for n in p.reds : Ball { label: n; }
-                                            Ball { label: p.blue; fill: #2563eb; }
-                                        }
-                                        Hint { text: p.meta; }
+                                KitTextField {
+                                    control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                    input-type: number;
+                                    width: 100%;
+                                    label: "预测注数";
+                                    placeholder: "1 - 20";
+                                    text <=> root.predict-count;
+                                }
+
+                                KitDivider { label: "红球策略（单选）"; }
+                                for a in root.red-algos : HorizontalLayout {
+                                    spacing: 8px;
+                                    KitCheckbox {
+                                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                        ownership: Ownership.controlled;
+                                        state: a.selected ? CheckState.checked : CheckState.unchecked;
+                                        label: a.name;
+                                        toggled => { root.toggle-algo(a.group, a.id); }
                                     }
+                                    Rectangle { horizontal-stretch: 1; }
                                     KitButton {
-                                        text: "复制";
+                                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                        text: "?";
                                         intent: ButtonIntent.quiet;
-                                        activated => { root.copy-line(p.line); }
+                                        accessible-label: a.name + " 算法说明";
+                                        activated => { root.show-info(a.group, a.id); }
+                                    }
+                                }
+
+                                KitDivider { label: "蓝球策略（单选）"; }
+                                for a in root.blue-algos : HorizontalLayout {
+                                    spacing: 8px;
+                                    KitCheckbox {
+                                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                        ownership: Ownership.controlled;
+                                        state: a.selected ? CheckState.checked : CheckState.unchecked;
+                                        label: a.name;
+                                        toggled => { root.toggle-algo(a.group, a.id); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    KitButton {
+                                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                        text: "?";
+                                        intent: ButtonIntent.quiet;
+                                        accessible-label: a.name + " 算法说明";
+                                        activated => { root.show-info(a.group, a.id); }
+                                    }
+                                }
+
+                                KitDivider { label: "过滤规则（可多选）"; }
+                                for a in root.rules : HorizontalLayout {
+                                    spacing: 8px;
+                                    KitCheckbox {
+                                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                        ownership: Ownership.controlled;
+                                        state: a.selected ? CheckState.checked : CheckState.unchecked;
+                                        label: a.name;
+                                        toggled => { root.toggle-algo(a.group, a.id); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    KitButton {
+                                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                        text: "?";
+                                        intent: ButtonIntent.quiet;
+                                        accessible-label: a.name + " 规则说明";
+                                        activated => { root.show-info(a.group, a.id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        KitButton {
+                            control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                            text: "生成预测";
+                            intent: ButtonIntent.primary;
+                            horizontal-stretch: 1;
+                            activated => {
+                                root.generate();
+                                if root.compact && root.predictions.length > 0 { root.mobile-results = true; }
+                            }
+                        }
+                        KitButton {
+                            control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                            text: "复制全部";
+                            disabled: root.predictions.length == 0;
+                            intent: ButtonIntent.secondary;
+                            activated => { root.copy-all(); }
+                        }
+                    }
+                    Hint {
+                        text: "复制格式：01,02,03,04,05,06+08（每行一组）";
+                        wrap: word-wrap;
+                    }
+                }
+
+                // 右：结果
+                if !root.compact || root.mobile-results : Card {
+                    min-width: 0px;
+                    card-padding: root.compact ? 12px : 20px;
+                    horizontal-stretch: 1;
+                    content-alignment: stretch;
+                    VerticalLayout {
+                        spacing: 16px;
+                        HorizontalLayout {
+                            CardTitle { text: "预测结果"; }
+                            Rectangle { horizontal-stretch: 1; }
+                            Hint { text: root.predictions.length > 0 ? "共 " + root.predictions.length + " 注" : "等待生成"; }
+                        }
+                        if root.compact : KitButton {
+                            control-size: ControlSize.comfortable;
+                            control-width: ControlWidth.fill;
+                            text: "复制全部";
+                            disabled: root.predictions.length == 0;
+                            intent: ButtonIntent.secondary;
+                            activated => { root.copy-all(); }
+                        }
+                        if root.predictions.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            KitEmptyState {
+                                width: 100%;
+                                height: self.preferred-height;
+                                y: (parent.height - self.height) / 2;
+                                title: "还没有预测结果";
+                                description: root.compact ? "在「预测设置」选择策略，点击「生成预测」。" : "在左侧选择红球与蓝球策略，点击「生成预测」。";
+                            }
+                        }
+                        if root.predictions.length > 0 : KitScrollArea {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                for p[i] in root.predictions : Card {
+                                    card-padding: root.compact ? 10px : 16px;
+                                    FlexboxLayout {
+                                        flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                                        flex-wrap: no-wrap;
+                                        spacing: root.compact ? 8px : 12px;
+                                        alignment: stretch;
+
+                                        Hint {
+                                            text: p.no;
+                                            width: 22px;
+                                            vertical-alignment: center;
+                                            font-weight: 700;
+                                        }
+
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 8px;
+                                            HorizontalLayout {
+                                                alignment: start;
+                                                spacing: root.compact ? 4px : 6px;
+                                                for n in p.reds : Ball { label: n; }
+                                                Ball { label: p.blue; fill: #2563eb; }
+                                            }
+                                            Hint { text: p.meta; }
+                                        }
+                                        KitButton {
+                                            control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
+                                            text: "复制";
+                                            intent: ButtonIntent.quiet;
+                                            activated => { root.copy-line(p.line); }
+                                        }
                                     }
                                 }
                             }
@@ -558,6 +695,7 @@ export component AppWindow inherits Window {
                     }
                 }
             }
+
         }
 
         // ------------------------------------------------ 统计页
@@ -565,10 +703,10 @@ export component AppWindow inherits Window {
             vertical-stretch: 1;
             padding-top: 16px;
             padding-bottom: 16px;
-            padding-left: 24px;
-            padding-right: 24px;
+            padding-left: root.gutter;
+            padding-right: root.gutter;
             spacing: 16px;
-            Card {
+            if !root.compact : Card {
                 width: 144px;
                 card-padding: 12px;
                 VerticalLayout {
@@ -576,6 +714,7 @@ export component AppWindow inherits Window {
                     spacing: 8px;
                     CardTitle { text: "统计导航"; }
                     for label[index] in ["数据概览", "红球遗漏", "蓝球与冷热", "形态分布", "形态均值"] : KitButton {
+                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
                         text: label;
                         width: 100%;
                         intent: root.stats-section == index ? ButtonIntent.primary : ButtonIntent.quiet;
@@ -600,19 +739,16 @@ export component AppWindow inherits Window {
                     alignment: start;
                     spacing: 16px;
 
-                    VerticalLayout {
+                    FlexboxLayout {
                         min-width: 0px;
                         spacing: 12px;
-                        for row in 2 : HorizontalLayout {
-                            spacing: 12px;
-                            for col in 3 : Card {
-                                width: (stats-scroll.visible-width - 24px) / 3;
-                                card-padding: 14px;
-                                KitStat {
-                                    label: root.overview-stats[row * 3 + col].label;
-                                    value: root.overview-stats[row * 3 + col].value;
-                                    description: root.overview-stats[row * 3 + col].hint;
-                                }
+                        for stat in root.overview-stats : Card {
+                            width: root.compact ? (stats-scroll.visible-width - 12px) / 2 : (stats-scroll.visible-width - 24px) / 3;
+                            card-padding: root.compact ? 12px : 14px;
+                            KitStat {
+                                label: stat.label;
+                                value: stat.value;
+                                description: stat.hint;
                             }
                         }
                     }
@@ -627,37 +763,43 @@ export component AppWindow inherits Window {
                                 text: "当前遗漏 / 平均遗漏 / 最大遗漏 / 当前连出；主题强调色为热号，蓝色为冷号。";
                                 wrap: word-wrap;
                             }
-                            HorizontalLayout {
+                            FlexboxLayout {
+                                flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                                flex-wrap: no-wrap;
                                 alignment: stretch;
-                                spacing: 24px;
-                                OmissionTable { heading: "01-11"; rows: root.omission-red-a; }
-                                OmissionTable { heading: "12-22"; rows: root.omission-red-b; }
-                                OmissionTable { heading: "23-33"; rows: root.omission-red-c; }
+                                spacing: root.compact ? 16px : 24px;
+                                OmissionTable { width: root.compact ? parent.width : (parent.width - 48px) / 3; heading: "01-11"; rows: root.omission-red-a; }
+                                OmissionTable { width: root.compact ? parent.width : (parent.width - 48px) / 3; heading: "12-22"; rows: root.omission-red-b; }
+                                OmissionTable { width: root.compact ? parent.width : (parent.width - 48px) / 3; heading: "23-33"; rows: root.omission-red-c; }
                             }
                         }
                     }
 
-                    blue-section := HorizontalLayout {
+                    blue-section := FlexboxLayout {
+                        flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                        flex-wrap: no-wrap;
                         spacing: 16px;
                         alignment: stretch;
 
                         Card {
-                            width: (stats-scroll.visible-width - 16px) / 2;
+                            width: root.compact ? stats-scroll.visible-width : (stats-scroll.visible-width - 16px) / 2;
                             VerticalLayout {
                                 alignment: start;
                                 spacing: 10px;
                                 CardTitle { text: "号码遗漏（蓝球）"; }
-                                HorizontalLayout {
+                                FlexboxLayout {
+                                    flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                                    flex-wrap: no-wrap;
                                     alignment: stretch;
-                                    spacing: 24px;
-                                    OmissionTable { heading: "01-08"; rows: root.omission-blue-a; }
-                                    OmissionTable { heading: "09-16"; rows: root.omission-blue-b; }
+                                    spacing: root.compact ? 16px : 24px;
+                                    OmissionTable { width: root.compact ? parent.width : (parent.width - 24px) / 2; heading: "01-08"; rows: root.omission-blue-a; }
+                                    OmissionTable { width: root.compact ? parent.width : (parent.width - 24px) / 2; heading: "09-16"; rows: root.omission-blue-b; }
                                 }
                             }
                         }
 
                         Card {
-                            width: (stats-scroll.visible-width - 16px) / 2;
+                            width: root.compact ? stats-scroll.visible-width : (stats-scroll.visible-width - 16px) / 2;
                             VerticalLayout {
                                 alignment: start;
                                 spacing: 10px;
@@ -694,9 +836,13 @@ export component AppWindow inherits Window {
                         alignment: start;
                         spacing: 12px;
                         CardTitle { text: "形态分布（全历史）"; }
-                        HorizontalLayout {
+                        FlexboxLayout {
+                            flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                            flex-wrap: no-wrap;
+                            cross-axis-alignment: start;
                             spacing: 12px;
                             VerticalLayout {
+                                width: root.compact ? parent.width : (parent.width - 24px) / 3;
                                 horizontal-stretch: 1;
                                 alignment: start;
                                 spacing: 12px;
@@ -706,12 +852,14 @@ export component AppWindow inherits Window {
                                 Card { card-padding: 14px; BucketCard { heading: "质合比"; rows: root.prime-buckets; } }
                             }
                             VerticalLayout {
+                                width: root.compact ? parent.width : (parent.width - 24px) / 3;
                                 horizontal-stretch: 1;
                                 alignment: start;
                                 spacing: 12px;
                                 Card { card-padding: 14px; BucketCard { heading: "012 路比"; rows: root.road-buckets; } }
                             }
                             VerticalLayout {
+                                width: root.compact ? parent.width : (parent.width - 24px) / 3;
                                 horizontal-stretch: 1;
                                 alignment: start;
                                 spacing: 12px;
@@ -727,14 +875,16 @@ export component AppWindow inherits Window {
                             alignment: start;
                             spacing: 8px;
                             CardTitle { text: "形态均值"; }
-                            for s in root.feature-stats : HorizontalLayout {
-                                spacing: 12px;
-                                Cell { text: s.label; cell-width: 200px; }
+                            for s in root.feature-stats : FlexboxLayout {
+                                flex-direction: root.compact ? FlexboxLayoutDirection.column : FlexboxLayoutDirection.row;
+                                flex-wrap: no-wrap;
+                                spacing: root.compact ? 4px : 12px;
+                                Cell { text: s.label; cell-width: root.compact ? parent.width : 200px; }
                                 Text {
                                     text: s.value;
                                     font-size: 13px;
                                     font-weight: 600;
-                                    width: 120px;
+                                    width: root.compact ? parent.width : 120px;
                                     color: KitThemeContext.current.text-primary;
                                     vertical-alignment: center;
                                 }
@@ -750,12 +900,13 @@ export component AppWindow inherits Window {
         if root.page == 2 : VerticalLayout {
             vertical-stretch: 1;
             padding: 16px;
-            padding-left: 24px;
-            padding-right: 24px;
+            padding-left: root.gutter;
+            padding-right: root.gutter;
 
             Card {
                 vertical-stretch: 1;
                 content-alignment: stretch;
+                card-padding: root.compact ? 12px : 20px;
                 VerticalLayout {
                     spacing: 12px;
                     HorizontalLayout {
@@ -763,13 +914,31 @@ export component AppWindow inherits Window {
                         CardTitle { text: "历史开奖"; vertical-alignment: center; }
                         Rectangle { horizontal-stretch: 1; }
                         Hint {
-                            text: "共 " + root.history-total + " 期 · 左右滚动查看全部指标";
+                            text: "共 " + root.history-total + " 期" + (root.compact ? "" : " · 左右滚动查看全部指标");
                             vertical-alignment: center;
                         }
                     }
 
+                    if root.compact : Rectangle {
+                        min-width: 0px;
+                        min-height: 0px;
+                        vertical-stretch: 1;
+                        // 延后检查虚拟列表的新高度，避免在滚动回调内追加造成底部续载停滞。
+                        Timer {
+                            interval: 100ms;
+                            running: root.history-rows.length < root.history-total
+                                && mobile-history.content-height + mobile-history.content-y - mobile-history.visible-height < 500px;
+                            triggered => { root.history-load-more(); }
+                        }
+                        mobile-history := ListView {
+                            for row in root.history-rows : MobileHistoryCard {
+                                draw: row;
+                                headers: root.history-header;
+                            }
+                        }
+                    }
                     // 表头与列表共享横向偏移，纵向滚动条始终位于可视区域右侧。
-                    VerticalLayout {
+                    if !root.compact : VerticalLayout {
                         spacing: 0px;
                         min-width: 0px;
                         min-height: 0px;
@@ -797,17 +966,17 @@ export component AppWindow inherits Window {
                             height: 1px;
                             background: KitThemeContext.current.border-subtle;
                         }
+                        Timer {
+                            interval: 100ms;
+                            running: root.history-rows.length < root.history-total
+                                && history-list.content-height + history-list.content-y - history-list.visible-height < 360px;
+                            triggered => { root.history-load-more(); }
+                        }
                         history-list := ListView {
                             min-width: 0px;
                             min-height: 0px;
                             vertical-stretch: 1;
                             content-width: max(self.visible-width, 1156px);
-                            scrolled => {
-                                if root.history-rows.length < root.history-total
-                                    && self.content-height + self.content-y - self.visible-height < 360px {
-                                    root.history-load-more();
-                                }
-                            }
                             for row[index] in root.history-rows : Rectangle {
                                 width: max(history-list.visible-width, 1156px);
                                 height: 36px;
@@ -847,10 +1016,10 @@ export component AppWindow inherits Window {
         triggered => { root.alert-open = false; }
     }
     if root.alert-open : KitToast {
-        width: min(root.width - 48px, 440px);
+        width: min(root.width - 2 * root.gutter, 440px);
         height: self.preferred-height;
-        x: root.width - self.width - 24px;
-        y: root.height - self.height - 24px;
+        x: root.width - self.width - root.gutter;
+        y: root.height - self.height - root.gutter - max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
         entry: {
             token: root.alert-token,
             title: root.alert-level == 3 ? "操作失败" : (root.alert-level == 1 ? "操作成功" : "提示"),
@@ -874,8 +1043,8 @@ export component AppWindow inherits Window {
         dismiss(reason) => { root.info-open = false; }
 
         KitDialogPanel {
-            width: min(parent.width - 96px, 560px);
-            height: min(parent.height - 120px, 440px);
+            width: min(parent.width - 2 * root.gutter, 560px);
+            height: min(parent.height - 2 * root.gutter, 440px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             accessible-name: root.info-title;
@@ -887,6 +1056,8 @@ export component AppWindow inherits Window {
                 KitDialogHeader {
                     Text {
                         text: root.info-title;
+                        min-width: 0px;
+                        wrap: word-wrap;
                         font-size: 18px;
                         font-weight: 700;
                         color: KitThemeContext.current.text-primary;
@@ -908,6 +1079,7 @@ export component AppWindow inherits Window {
 
                 KitDialogFooter {
                     KitButton {
+                        control-size: root.compact ? ControlSize.comfortable : ControlSize.medium;
                         text: "关闭";
                         activated => { root.info-open = false; }
                     }

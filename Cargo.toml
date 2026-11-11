@@ -31,6 +31,10 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 arboard = "3"
 
 [target.'cfg(target_os = "android")'.dependencies]
+# Android 的指针标记与 NaN boxing 冲突，使用 Boa 的枚举值表示。
+boa_engine = { version = "0.22", features = ["jsvalue-enum"] }
+# 与 Slint 严格同版本，复用 Android 后端的系统剪贴板实现。
+i-slint-backend-selector = { version = "=1.18.1", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "gzip", "rustls-tls-webpki-roots"] }
 
 [build-dependencies]
@@ -44,3 +48,13 @@ build_targets = ["aarch64-linux-android"]
 [package.metadata.android.sdk]
 min_sdk_version = 24
 target_sdk_version = 35
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
+[package.metadata.android.application]
+label = "双色球分析"
+theme = "@android:style/Theme.Material.Light.NoActionBar"
+
+[profile.release]
+strip = "debuginfo"

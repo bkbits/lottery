@@ -3789,6 +3789,7 @@ dependencies = [
  "arboard",
  "boa_engine",
  "dirs",
+ "i-slint-backend-selector",
  "regex",
  "reqwest",
  "sea-orm",

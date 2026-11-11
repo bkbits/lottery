@@ -34,11 +34,29 @@ CREATE TABLE IF NOT EXISTS setting (
     value TEXT NOT NULL
 )";
 
+#[cfg(target_os = "android")]
+static ANDROID_DATA_DIR: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+#[cfg(target_os = "android")]
+pub(crate) fn set_android_data_dir(path: PathBuf) {
+    *ANDROID_DATA_DIR
+        .lock()
+        .expect("Android data directory lock poisoned") = Some(path);
+}
+
 /// 默认数据库位置：系统数据目录下的 `lottery/lottery.db`。
+/// Android 使用当前 Activity 的应用私有目录，不需要存储权限。
 pub fn default_db_path() -> PathBuf {
     if let Ok(custom) = std::env::var("LOTTERY_DB") {
         return PathBuf::from(custom);
     }
+    #[cfg(target_os = "android")]
+    let base = ANDROID_DATA_DIR
+        .lock()
+        .expect("Android data directory lock poisoned")
+        .clone()
+        .expect("Android data directory must be initialized before opening the database");
+    #[cfg(not(target_os = "android"))]
     let base = dirs::data_local_dir()
         .or_else(dirs::data_dir)
         .unwrap_or_else(|| PathBuf::from("."));
